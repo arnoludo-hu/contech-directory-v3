@@ -1,0 +1,3 @@
+import type {Metadata} from 'next';import Link from 'next/link';import {Building2} from 'lucide-react';import './globals.css';
+export const metadata:Metadata={title:'ConTech Directory | Find AI solutions for the built environment',description:'Discover evidence-backed AI solutions for Singapore built environment firms.'};
+export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body><header className="topbar"><Link className="brand" href="/"><span className="brand-icon"><Building2 size={21}/></span><span>ConTech<span className="brand-muted"> Directory</span></span></Link></header>{children}</body></html>}
