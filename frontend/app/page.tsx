@@ -105,4 +105,7 @@ onClick={()=>void run(c.query)}><Icon size={24}/><strong>{c.title}</strong><span
 {data?.matches.map(m=><article className="result-card refined-card" key={m.solution_id}><div className="result-head"><div><div className="small muted">{m.company}</div><h3>{m.solution}</h3></div></div><div className="divider"/><div className="result-facts"><span><strong>Country:</strong> {m.origin_label||m.origin_country||'Not specified'}</span><span><strong>Use case:</strong> {m.use_cases?.join(', ')||'Not specified'}</span><span><strong>Technology:</strong> {m.technologies?.join(', ')||'Not specified'}</span><span><strong>PSG:</strong> {readableStatus(m.psg_status)}</span><span><strong>Singapore presence:</strong> {readableStatus(m.singapore_presence_status)}</span></div><div className="flex">{m.source_urls.slice(0,2).map((u,i)=><a className="link small" key={i} href={u} target="_blank" rel="noopener noreferrer">Vendor website {i+1} ↗</a>)}</div></article>)}
 {data&&data.matches.length===0&&<div className="empty"><ShieldCheck size={24}/><h3>No confirmed matches</h3><p>Try removing a mandatory filter or ask for clearly labelled alternatives. Unknown attributes are never treated as verified.</p></div>}{!data&&<div className="empty">Search for solutions using the box above.</div>}
 {data&&data.total_solutions>data.page*data.page_size&&<button className="button secondary" disabled={busy} onClick={()=>void changePage(data.page+1)}>Next page →</button>}{data&&data.page>1&&<button className="button secondary" style={{marginLeft:8}} disabled={busy} onClick={()=>void changePage(data.page-1)}>← Previous</button>}
-</div></div></section></main>}
+</div></div></section>
+</main>
+);
+}
