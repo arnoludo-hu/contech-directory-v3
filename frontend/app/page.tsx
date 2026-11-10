@@ -69,11 +69,99 @@ useEffect(() => {
   };
 }, [retryCount]);
                      
+
+async function run(
+  text: string,
+  page = 1,
+  continueSession = true
+) {
+  if (!text.trim() || busy) return;
+
+  setBusy(true);
+  setError("");
+
+  try {
+    // Wake FastAPI before submitting a search.
+    let ready = false;
+
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const response = await fetch(
+          `/api/backend-status?t=${Date.now()}`,
+          { cache: "no-store" }
+        );
+
+        if (response.ok) {
+          const result = await response.json();
+
+          if (result.ready === true) {
+            ready = true;
+            break;
+          }
+        }
+      } catch {
+        // Backend may still be waking up.
+      }
+
+      if (attempt < 3) {
+        await new Promise(resolve =>
+          setTimeout(resolve, 3000)
+        );
+      }
+    }
+
+    if (!ready) {
+      setBackendReady(false);
+      throw new Error(
+        "Search service is starting. Please try again shortly."
+      );
+    }
+
+    setBackendReady(true);
+    setBackendChecking(false);
+
+    // Perform the actual ConTech search.
+    const response = await searchRequest(
+      text,
+      continueSession ? data?.session_id : undefined,
+      page,
+      10
+    );
+
+    setData(response);
+    setLastMessage(text);
+
+    if (page === 1) {
+      setMessages(old => [
+        ...old,
+        { role: "user", text },
+        {
+          role: "assistant",
+          text:
+            response.clarification ||
+            response.message ||
+            `${response.total_solutions} matching solutions`
+        }
+      ]);
+    }
+
+  } catch (e) {
+    setError(
+      e instanceof Error
+        ? e.message
+        : "Unable to search"
+    );
+  } finally {
+    setBusy(false);
+  }
+}
                                
-async function run(text:string,page=1,continueSession=true){
-  if(!text.trim() || !backendReady || backendChecking)return;setBusy(true);setError('');try{const response=await searchRequest(text,continueSession?data?.session_id:undefined,page,10);setData(response);setLastMessage(text);if(page===1){setMessages(old=>[...old,{role:'user',text},{role:'assistant',text:response.clarification||response.message||`${response.total_solutions} matching solutions`}]);}}catch(e){setError(e instanceof Error?e.message:'Unable to search')}finally{setBusy(false)}}
 async function changePage(page:number){if(!data)return;setBusy(true);setError('');try{const result=await api<SearchResponse>('/v1/sessions/'+encodeURIComponent(data.session_id)+'/results?page='+page+'&page_size=10');setData(result)}catch(e){setError(e instanceof Error?e.message:'Unable to load page')}finally{setBusy(false)}}
-function submit(e:React.FormEvent){e.preventDefault();void run(query);setQuery('')}
+function submit(e: React.FormEvent) {
+  e.preventDefault();
+  void run(query);
+}
+                               
 return <main className="container">
 {backendChecking && (
   <div className="status" role="status">
@@ -82,9 +170,7 @@ return <main className="container">
   </div>
 )}
 
-{!backendChecking && !backendReady && (
-  <div className="status error" role="alert">
-    Search service is temporarily unavailable.
+
     <button
       type="button"
       className="button secondary"
@@ -95,11 +181,18 @@ return <main className="container">
     </button>
   </div>
 )}
-<section className="hero"><h1>Find the right technology for your built environment challenge.</h1><form className="searchbox" onSubmit={submit}><Search color="#63798c"/><input aria-label="Describe your challenge" value={query} onChange={e=>setQuery(e.target.value)} placeholder="e.g. I need AI to monitor progress across construction sites"/><button className="button" disabled={busy || backendChecking || !backendReady || !query.trim()}>{busy?<Loader2 size={16}/>:<ArrowRight size={16}/>} Find solutions</button></form><div className="chips">{examples.map(e=><button key={e} className="chip" disabled={!backendReady || backendChecking || busy}
+<section className="hero"><h1>Find the right technology for your built environment challenge.</h1><form className="searchbox" onSubmit={submit}><Search color="#63798c"/><input aria-label="Describe your challenge" value={query} onChange={e=>setQuery(e.target.value)} placeholder="e.g. I need AI to monitor progress across construction sites"/><button className="button" disabled={busy || !query.trim()}>{busy?<Loader2 size={16}/>:<ArrowRight size={16}/>} Find solutions</button></form><div className="chips">{examples.map(e=><button key={e} className="chip"  disabled={busy}
 onClick={()=>void run(e)}>{e}</button>)}</div></section>
-{!data&&<section className="section"><h2>What would you like to improve?</h2><div className="challenge-grid">{challenges.map(({icon:Icon,...c})=><button key={c.title} className="challenge" disabled={!backendReady || backendChecking || busy}
+{!data&&<section className="section"><h2>What would you like to improve?</h2><div className="challenge-grid">{challenges.map(({icon:Icon,...c})=><button key={c.title} className="challenge" disabled={busy}
 onClick={()=>void run(c.query)}><Icon size={24}/><strong>{c.title}</strong><span>{c.desc}</span></button>)}</div></section>}
-<section className="section workspace refined-workspace"><div className="results-column"><div className="panel"><div className="flex space"><h2 style={{margin:0}}>Conversation</h2></div>{messages.length===0?<p className="muted">Your conversation will appear here. Ask a question or select an example above.</p>:<div className="chat-log" aria-live="polite">{messages.slice(-8).map((m,i)=><div className={'bubble '+(m.role==='user'?'user':'')} key={i}>{m.text}</div>)}</div>}{data?.clarification&&<div className="status">Clarification: {data.clarification}</div>}<form className="searchbox" style={{margin:'15px 0 0',boxShadow:'none'}} onSubmit={submit}><input aria-label="Follow-up question" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Ask a follow-up, e.g. only those with local support"/><button className="button" disabled={busy || backendChecking || !backendReady || !query.trim()}>Send</button></form></div>
+<section className="section workspace refined-workspace"><div className="results-column"><div className="panel"><div className="flex space"><h2 style={{margin:0}}>Conversation</h2></div>{messages.length===0?<p className="muted">Your conversation will appear here. Ask a question or select an example above.</p>:<div className="chat-log" aria-live="polite">{messages.slice(-8).map((m,i)=><div className={'bubble '+(m.role==='user'?'user':'')} key={i}>{m.text}</div>)}</div>}{data?.clarification&&<div className="status">Clarification: {data.clarification}</div>}<form className="searchbox" style={{margin:'15px 0 0',boxShadow:'none'}} onSubmit={submit}><input aria-label="Follow-up question" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Ask a follow-up, e.g. only those with local support"/>
+<button
+  className="button"
+  disabled={busy || !query.trim()}
+>
+  Send
+</button>
+</form></div>
 {error&&<div className="status error" role="alert">{error}</div>}
 <div className="section"><div className="flex space"><div><h2 style={{marginBottom:2}}>Matching solutions</h2><span className="muted small">{data?`${data.total_solutions} solutions from ${data.total_companies} companies`:'Search to see results from the connected database'}</span></div></div>
 {data?.matches.map(m=><article className="result-card refined-card" key={m.solution_id}><div className="result-head"><div><div className="small muted">{m.company}</div><h3>{m.solution}</h3></div></div><div className="divider"/><div className="result-facts"><span><strong>Country:</strong> {m.origin_label||m.origin_country||'Not specified'}</span><span><strong>Use case:</strong> {m.use_cases?.join(', ')||'Not specified'}</span><span><strong>Technology:</strong> {m.technologies?.join(', ')||'Not specified'}</span><span><strong>PSG:</strong> {readableStatus(m.psg_status)}</span><span><strong>Singapore presence:</strong> {readableStatus(m.singapore_presence_status)}</span></div><div className="flex">{m.source_urls.slice(0,2).map((u,i)=><a className="link small" key={i} href={u} target="_blank" rel="noopener noreferrer">Vendor website {i+1} ↗</a>)}</div></article>)}
