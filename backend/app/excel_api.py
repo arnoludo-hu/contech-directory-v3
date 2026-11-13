@@ -13,6 +13,7 @@ from .interpreter import interpret
 from .state import merge
 from .excel_store import ExcelStore,code
 from .explanations import explain
+from .capability_gate import specific_intent, eligible
 from fastapi.responses import JSONResponse
 
 _semantic_model=None
@@ -78,8 +79,12 @@ def render(s,plan,page,page_size,from_snapshot=False):
     else:
         scored=score_rows(confirmed,plan)
         s.snapshot=[r['solution_id'] for _,r in scored]
+    # Capability gate: evidence-based eligibility before ranking, never keyword-only top-k.
+    capability = specific_intent(plan.problem)
+    if capability and plan.intent not in ("list", "count", "compare"):
+        scored = [(score, row) for score, row in scored if eligible(row, capability)]
     # Search discovery is not the same as browse-all. Suppress irrelevant candidates.
-    if plan.intent not in ('list','count','compare') and plan.problem.strip():
+    if plan.intent not in ('list','count','compare') and plan.problem.strip() and not capability:
         if not plan.hard:
             scored=[(score,r) for score,r in scored if score >= float(os.getenv('MIN_RELEVANCE_SCORE','25'))]
         else:
@@ -100,6 +105,9 @@ def render(s,plan,page,page_size,from_snapshot=False):
         explanation=explain(r,plan,score)
         matches.append(Match(solution_id=r['solution_id'],company_id=r['company_id'],company=r['company'],solution=r['solution'],score=score,source_urls=r['source_urls'],**explanation))
     message=(f'{total} matching imported solution records from {companies} company labels. Recorded claims have not been independently verified.' if total else 'No matching records for these filters. Unknown required attributes are excluded; try removing a constraint.')
+    if capability and not total:
+        message=('No solutions have sufficient recorded evidence for this digital-twin requirement. '
+                 'Related BIM/FM and building analytics tools are not confirmed digital twins.')
     if plan.intent=='count':message=f'{total} provisional solution records from {companies} company labels satisfy the current database filters. This is not a verified market count.'
     if plan.intent=='compare':message='Comparison of previously selected result positions. All claims remain unverified.'
     # Strict PSG verification must never be inferred from a historical Yes/Pre-Approved.
